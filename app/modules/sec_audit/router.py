@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, status
 import redis.asyncio as redis
 
+from app.core.config import get_settings
 from app.core.redis_client import get_redis
 from app.modules.sec_audit.schemas import (
     AuditRequest,
@@ -16,7 +17,13 @@ def get_audit_service(
     redis_client: redis.Redis = Depends(get_redis),
 ) -> SecurityAuditService:
     """FastAPI dependency injecting Redis-backed SecurityAuditService."""
-    return SecurityAuditService(redis_client=redis_client)
+    auth_key = get_settings().urlhaus_auth_key.strip()
+    urlhaus_url = (
+        f"https://urlhaus-api.abuse.ch/v2/files/exports/{auth_key}/text_online/"
+        if auth_key
+        else None
+    )
+    return SecurityAuditService(redis_client=redis_client, urlhaus_url=urlhaus_url)
 
 
 @router.post(

@@ -977,3 +977,49 @@ def test_audit_security_headers_csp_subdomain_wildcard_and_comma_folded_headers(
     assert "X-Frame-Options" in res_bad_fa.missing
 
 
+@pytest.mark.asyncio
+async def test_sync_threat_feeds_skips_urlhaus_when_disabled():
+    fake_redis = FakeAsyncRedis()
+    requested_urls: list[str] = []
+
+    def feed_handler(request: httpx.Request) -> httpx.Response:
+        requested_urls.append(str(request.url))
+        if str(request.url) == OPENPHISH_FEED_URL:
+            return httpx.Response(200, text="https://login.phish-bank.com/auth\n")
+        return httpx.Response(410)
+
+    transport = httpx.MockTransport(feed_handler)
+    async with httpx.AsyncClient(transport=transport) as mock_http:
+        service = SecurityAuditService(
+            redis_client=fake_redis,  # type: ignore[arg-type]
+            http_client=mock_http,
+            urlhaus_url=None,
+        )
+        sync_res = await service.sync_threat_feeds()
+
+    assert sync_res.synced is True
+    assert sync_res.urlhaus_count == 0
+    assert sync_res.openphish_count == 1
+    assert sync_res.errors == []
+    assert requested_urls == [OPENPHISH_FEED_URL]
+
+
+def test_get_audit_service_uses_urlhaus_auth_key(monkeypatch):
+    from app.core.config import get_settings
+    from app.modules.sec_audit.router import get_audit_service
+
+    fake_redis = FakeAsyncRedis()
+
+    monkeypatch.delenv("URLHAUS_AUTH_KEY", raising=False)
+    get_settings.cache_clear()
+    svc_without_key = get_audit_service(redis_client=fake_redis)  # type: ignore[arg-type]
+    assert svc_without_key.urlhaus_url is None
+
+    monkeypatch.setenv("URLHAUS_AUTH_KEY", "test-key-123")
+    get_settings.cache_clear()
+    svc_with_key = get_audit_service(redis_client=fake_redis)  # type: ignore[arg-type]
+    assert svc_with_key.urlhaus_url == "https://urlhaus-api.abuse.ch/v2/files/exports/test-key-123/text_online/"
+    get_settings.cache_clear()
+
+
+

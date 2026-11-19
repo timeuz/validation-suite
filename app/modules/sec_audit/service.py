@@ -809,7 +809,7 @@ class SecurityAuditService:
         self,
         redis_client: redis.Redis,
         http_client: httpx.AsyncClient | None = None,
-        urlhaus_url: str = URLHAUS_FEED_URL,
+        urlhaus_url: str | None = URLHAUS_FEED_URL,
         openphish_url: str = OPENPHISH_FEED_URL,
     ) -> None:
         self.redis = redis_client
@@ -855,15 +855,20 @@ class SecurityAuditService:
                 errors.append(f"{name} sync failed: {exc}")
                 return None
 
+        async def _maybe_fetch_urlhaus(client: httpx.AsyncClient) -> str | None:
+            if not self.urlhaus_url:
+                return None
+            return await _fetch_feed(client, "urlhaus", self.urlhaus_url)
+
         if self.http_client is not None:
             uh_text, op_text = await asyncio.gather(
-                _fetch_feed(self.http_client, "urlhaus", self.urlhaus_url),
+                _maybe_fetch_urlhaus(self.http_client),
                 _fetch_feed(self.http_client, "openphish", self.openphish_url),
             )
         else:
             async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
                 uh_text, op_text = await asyncio.gather(
-                    _fetch_feed(client, "urlhaus", self.urlhaus_url),
+                    _maybe_fetch_urlhaus(client),
                     _fetch_feed(client, "openphish", self.openphish_url),
                 )
 

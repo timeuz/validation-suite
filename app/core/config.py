@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     rapidapi_proxy_secret: str = ""
     redis_url: str = "redis://localhost:6379/0"
+    urlhaus_auth_key: str = ""
     public_paths: tuple[str, ...] = ("/health",)
 
 
