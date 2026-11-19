@@ -1,0 +1,36 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        ENV PYTHONUNBUFFERED=1
+        WORKDIR /srv
+        RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr libmagic1 && rm -rf /var/lib/apt/lists/*
+        COPY requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+        COPY app ./app
+        CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000","--proxy-headers","--forwarded-allow-ips","*"]
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on: [redis]
+    expose: ["8000"]
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server","--maxmemory","256mb","--maxmemory-policy","allkeys-lru"]
+    restart: unless-stopped
+  caddy:
+    image: caddy:2-alpine
+    env_file: .env
+    ports: ["80:80","443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    restart: unless-stopped
+volumes:
+  caddy_data:
+  caddy_config:
