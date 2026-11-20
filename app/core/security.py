@@ -15,8 +15,9 @@ class RapidAPIProxyMiddleware(BaseHTTPMiddleware):
         if request.url.path in s.public_paths:
             return await call_next(request)
         provided = request.headers.get("X-RapidAPI-Proxy-Secret", "")
-        if not s.rapidapi_proxy_secret or not hmac.compare_digest(
-            provided.encode(), s.rapidapi_proxy_secret.encode()
-        ):
+        secrets = s.proxy_secrets
+        # sem curto-circuito: tempo constante em relação a qual secret bateu
+        matches = [hmac.compare_digest(provided.encode(), x.encode()) for x in secrets]
+        if not secrets or not any(matches):
             return error_response(request, 403, "forbidden", "Invalid or missing proxy secret.")
         return await call_next(request)

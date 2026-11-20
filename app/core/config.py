@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     urlhaus_auth_key: str = ""
     public_paths: tuple[str, ...] = ("/health",)
 
+    @property
+    def proxy_secrets(self) -> list[str]:
+        """RAPIDAPI_PROXY_SECRET aceita vários valores separados por vírgula (um por API)."""
+        return [x.strip() for x in self.rapidapi_proxy_secret.split(",") if x.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:
